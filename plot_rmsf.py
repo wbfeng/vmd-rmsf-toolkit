@@ -53,12 +53,15 @@ def read_dat(path: str):
             parts = line.split()
             if ncols is None:
                 ncols = len(parts)
-            # 两种格式: residue.dat(5列: resid resname chain segid rmsf)
+            # 三种格式: residue.dat(5列: resid resname chain segid rmsf)
             #           atom.dat   (6列: ... atomname rmsf)
+            #           residue.dat 无segid时(4列: resid resname chain rmsf)
             if ncols == 5:
                 rid, rmsf = parts[0], parts[4]
             elif ncols == 6:
                 rid, rmsf = parts[0], parts[5]
+            elif ncols == 4:
+                rid, rmsf = parts[0], parts[3]
             else:
                 sys.exit(f"无法识别的数据列数 ({ncols}): {line}")
             try:
