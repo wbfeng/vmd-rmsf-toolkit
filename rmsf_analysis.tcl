@@ -32,6 +32,28 @@ namespace eval ::rmsf {
 }
 
 # ------------------------------------------------------------------
+# 辅助函数：按扩展名推断 VMD 文件类型
+#   (VMD 1.9.3 Win32 的 type auto 对部分文件探测失败，需显式指定)
+# ------------------------------------------------------------------
+proc ::rmsf::guess_type {filename} {
+    set ext [string tolower [file extension $filename]]
+    switch -- $ext {
+        .pdb    { return pdb }
+        .psf    { return psf }
+        .dcd    { return dcd }
+        .xtc    { return xtc }
+        .trr    { return trr }
+        .gro    { return gro }
+        .crd    { return crd }
+        .cor    { return crd }
+        .prmtop -
+        .parm7  { return parm7 }
+        .xyz    { return xyz }
+        default { return auto }
+    }
+}
+
+# ------------------------------------------------------------------
 # 辅助函数：载入体系（拓扑 + 单条或多条轨迹）
 #   topology : PSF / PDB 文件路径
 #   traj     : 轨迹文件路径或路径列表（DCD/XTC/TRR 均可，type 自动识别）
@@ -41,7 +63,8 @@ proc ::rmsf::load_system {topology traj} {
     if {![file exists $topology]} {
         error "拓扑文件不存在: $topology"
     }
-    set molid [mol new $topology type auto waitfor all]
+    set ttype [::rmsf::guess_type $topology]
+    set molid [mol new $topology type $ttype waitfor all]
     puts "\[RMSF\] 载入拓扑: $topology (molid=$molid)"
 
     if {$traj ne ""} {
@@ -54,8 +77,9 @@ proc ::rmsf::load_system {topology traj} {
             if {![file exists $f]} {
                 error "轨迹文件不存在: $f"
             }
-            mol addfile $f type auto first 0 last -1 step 1 waitfor all $molid
-            puts "\[RMSF\] 载入轨迹: $f"
+            set ftype [::rmsf::guess_type $f]
+            mol addfile $f type $ftype first 0 last -1 step 1 waitfor all $molid
+            puts "\[RMSF\] 载入轨迹: $f (type=$ftype)"
         }
     }
     set nf [molinfo $molid get numframes]
@@ -257,15 +281,17 @@ proc ::rmsf::analyze {args} {
     puts "\[RMSF\] 已写出: ${opts(-out)}.residue.dat"
 
     # --- 4c. B-factor 替换 PDB（用于柔性可视化着色） ---
+    # 注意: beta 是逐帧数据，必须先将选择切到被导出的帧再写入
+    $sel frame $f0
     $sel set beta $rmsf
     animate write pdb "${opts(-out)}_rmsf.pdb" begiframe $f0 endiframe $f0 sel $sel
     puts "\[RMSF\] 已写出: ${opts(-out)}_rmsf.pdb (B-factor列 = RMSF值)"
 
     # --- 4d. 平均结构 PDB ---
     set avsel [atomselect $molid $opts(-sel)]
+    $avsel frame 0
     $avsel set {x y z} $avpos
-    $avsel frame $f0
-    animate write pdb "${opts(-out)}_average.pdb" begiframe $f0 endiframe $f0 sel $avsel
+    animate write pdb "${opts(-out)}_average.pdb" begiframe 0 endiframe 0 sel $avsel
     $avsel delete
     puts "\[RMSF\] 已写出: ${opts(-out)}_average.pdb (平均结构坐标)"
 
